@@ -12,7 +12,7 @@ I wanted an easier way to inspect a session: the agent's messages, tool use, thi
 
 - Search sessions, similar to `claude -r`
 - Color-coded session view for different message types
-- Live updates while the session file is growing (at least this works on MacOS)
+- When you are viewing an active session, new entries appear automatically without reloading
 - Toggle visibility for individual message blocks
 - Jump to the top or bottom of a session
 
