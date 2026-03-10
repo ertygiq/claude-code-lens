@@ -15,6 +15,7 @@ I wanted an easier way to inspect a session: the agent's messages, tool use, thi
 - When you are viewing an active session, new entries appear automatically without reloading
 - Toggle visibility for individual message blocks
 - Jump to the top or bottom of a session
+- Every session has a direct URL you can save and open later
 
 Note: this currently assumes sessions live in `~/.claude/projects`, so it is unlikely to work on Windows without changes.
 
