@@ -733,6 +733,7 @@
     <div class="header-controls">
       <button onclick="outputEl.scrollTo({top: 0, behavior: 'smooth'})">Top</button>
       <button onclick="outputEl.scrollTo({top: outputEl.scrollHeight, behavior: 'smooth'})">Bottom</button>
+      <button id="autoScrollToggle" onclick="toggleAutoScroll()" title="Toggle automatic scrolling for live updates">Auto-Scroll: On</button>
       <button id="toggleInput">Hide Input</button>
       <button onclick="restartServer()" title="Restart server">&#x21bb;</button>
     </div>
@@ -775,11 +776,29 @@
     const errorEl = document.getElementById('error');
     const inputSection = document.getElementById('inputSection');
     const toggleInputBtn = document.getElementById('toggleInput');
+    const autoScrollToggleBtn = document.getElementById('autoScrollToggle');
     const filterBtns = document.querySelectorAll('.filter-btn');
 
     let currentFilter = 'all';
+    let autoScrollEnabled = localStorage.getItem('autoScrollEnabled') !== 'false';
     let parsedEntries = [];
     let showOnlyBookmarked = false;
+
+    function updateAutoScrollToggle() {
+      autoScrollToggleBtn.textContent = 'Auto-Scroll: ' + (autoScrollEnabled ? 'On' : 'Off');
+      autoScrollToggleBtn.setAttribute('aria-pressed', autoScrollEnabled ? 'true' : 'false');
+      autoScrollToggleBtn.title = autoScrollEnabled
+        ? 'Disable automatic scrolling for live updates'
+        : 'Enable automatic scrolling for live updates';
+    }
+
+    window.toggleAutoScroll = function() {
+      autoScrollEnabled = !autoScrollEnabled;
+      localStorage.setItem('autoScrollEnabled', String(autoScrollEnabled));
+      updateAutoScrollToggle();
+    };
+
+    updateAutoScrollToggle();
 
     // Bookmark helpers
     function getBookmarks() {
@@ -1624,7 +1643,7 @@
             const wasAtBottom = outputEl.scrollHeight - outputEl.scrollTop - outputEl.clientHeight < 50;
             outputEl.insertAdjacentHTML('beforeend', html);
             applyFilter();
-            if (wasAtBottom) {
+            if (autoScrollEnabled && wasAtBottom) {
               outputEl.scrollTop = outputEl.scrollHeight;
             }
           }
