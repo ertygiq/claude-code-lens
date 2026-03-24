@@ -1707,7 +1707,9 @@
 
     // Restart server (launchd will auto-restart it)
     window.restartServer = function() {
-      fetch('/api/restart').catch(() => {});
+      fetch('/api/restart', {
+        method: 'POST'
+      }).catch(() => {});
       document.title = 'Restarting...';
       setTimeout(() => location.reload(), 1500);
     };

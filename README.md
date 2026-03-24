@@ -27,8 +27,18 @@ cd claude-code-lens
 node server.js
 ```
 
-Optional port:
+## Configuration
 
-```bash
-node server.js -p 4567
+Runtime network settings live in `config.json`. The repo only commits `config.example.json`; on first start, the server copies that file to `config.json` if it does not already exist.
+
+```json
+{
+  "port": 3000,
+  "bindHost": "127.0.0.1",
+  "allowedHosts": ["localhost", "127.0.0.1", "::1"]
+}
 ```
+
+- `bindHost` controls which interface the server listens on
+- `allowedHosts` controls which hostnames are accepted
+- `port` is the listening port on the bind interface

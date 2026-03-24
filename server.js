@@ -5,22 +5,107 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 
-function getPort() {
-  const args = process.argv.slice(2);
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if ((arg === '-p' || arg === '--port') && args[i + 1]) return args[i + 1];
-    if (arg.startsWith('--port=')) return arg.slice('--port='.length);
-  }
-  return process.env.PORT || 3000;
-}
-
-const PORT = getPort();
+const CONFIG_PATH = path.join(__dirname, 'config.json');
+const CONFIG_EXAMPLE_PATH = path.join(__dirname, 'config.example.json');
 const PROJECTS_DIRS = [path.join(os.homedir(), '.claude', 'projects')];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.jsonl)?$/;
 
+function loadConfig() {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    fs.copyFileSync(CONFIG_EXAMPLE_PATH, CONFIG_PATH);
+  }
+
+  const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+  const parsed = JSON.parse(raw);
+
+  if (!Number.isInteger(parsed.port) || parsed.port < 1 || parsed.port > 65535) {
+    throw new Error('config.json: "port" must be an integer between 1 and 65535');
+  }
+
+  if (typeof parsed.bindHost !== 'string' || !parsed.bindHost.trim()) {
+    throw new Error('config.json: "bindHost" must be a non-empty string');
+  }
+
+  if (!Array.isArray(parsed.allowedHosts) || parsed.allowedHosts.length === 0) {
+    throw new Error('config.json: "allowedHosts" must be a non-empty array');
+  }
+
+  const allowedHosts = parsed.allowedHosts.map(host => String(host).trim().toLowerCase()).filter(Boolean);
+  if (allowedHosts.length === 0) {
+    throw new Error('config.json: "allowedHosts" must contain at least one non-empty value');
+  }
+
+  return {
+    port: parsed.port,
+    bindHost: parsed.bindHost.trim(),
+    allowedHosts,
+  };
+}
+
+const config = loadConfig();
+const PORT = config.port;
+const BIND_HOST = config.bindHost;
+const ALLOWED_HOSTS = new Set(config.allowedHosts);
+
 function pathToId(p) { return Buffer.from(p).toString('base64url'); }
 function idToPath(id) { return Buffer.from(id, 'base64url').toString(); }
+
+function getOriginAuthority(value) {
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    return {
+      host: url.hostname.toLowerCase(),
+      port: url.port || defaultPortForProtocol(url.protocol),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function defaultPortForProtocol(protocol) {
+  if (protocol === 'http:') return '80';
+  if (protocol === 'https:') return '443';
+  return '';
+}
+
+function normalizeAuthority(hostHeader) {
+  if (!hostHeader) return null;
+  const normalized = hostHeader.trim().toLowerCase();
+  if (normalized.startsWith('[')) {
+    const match = normalized.match(/^\[([^\]]+)\](?::(\d+))?$/);
+    if (!match) return null;
+    return {
+      host: match[1],
+      port: match[2] || '80',
+    };
+  }
+
+  const match = normalized.match(/^([^:]+)(?::(\d+))?$/);
+  if (!match) return null;
+  return {
+    host: match[1],
+    port: match[2] || '80',
+  };
+}
+
+function isAllowedHostHeader(hostHeader) {
+  const authority = normalizeAuthority(hostHeader);
+  return !!authority && authority.port === String(PORT) && ALLOWED_HOSTS.has(authority.host);
+}
+
+function isAllowedOrigin(req) {
+  const originAuthority = getOriginAuthority(req.headers.origin);
+  if (originAuthority) return originAuthority.port === String(PORT) && ALLOWED_HOSTS.has(originAuthority.host);
+  const refererAuthority = getOriginAuthority(req.headers.referer);
+  if (refererAuthority) return refererAuthority.port === String(PORT) && ALLOWED_HOSTS.has(refererAuthority.host);
+  return false;
+}
+
+function reject(res, status, message) {
+  res.writeHead(status, { 'Content-Type': 'text/plain' });
+  res.end(message);
+}
 
 function safePath(id) {
   try {
@@ -170,6 +255,11 @@ function streamSession(filePath, startOffset, res) {
 }
 
 async function handleRequest(req, res) {
+  if (!isAllowedHostHeader(req.headers.host)) {
+    reject(res, 403, 'Forbidden host');
+    return;
+  }
+
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
 
@@ -207,6 +297,14 @@ async function handleRequest(req, res) {
   }
 
   if (p === '/api/restart') {
+    if (req.method !== 'POST') {
+      reject(res, 405, 'Method not allowed');
+      return;
+    }
+    if (!isAllowedOrigin(req)) {
+      reject(res, 403, 'Forbidden origin');
+      return;
+    }
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('restarting');
     setTimeout(() => process.exit(0), 100);
@@ -218,6 +316,6 @@ async function handleRequest(req, res) {
 }
 
 const server = http.createServer(handleRequest);
-server.listen(PORT, () => {
-  console.log(`Claude Code Lens → http://localhost:${PORT}`);
+server.listen(PORT, BIND_HOST, () => {
+  console.log(`Claude Code Lens → http://${BIND_HOST}:${PORT}`);
 });
