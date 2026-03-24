@@ -15,6 +15,7 @@ Thumbs.db
 # Optional local env
 .env
 .env.local
+config.json
 
 # Build/output
 /dist/
